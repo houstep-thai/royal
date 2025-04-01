@@ -1,2 +1,124 @@
-# royal
-하하하하하하하
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Multi-Language Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        #chatList { max-height: 400px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container mt-3">
+        <h3>Multi-Language Chat</h3>
+        <ul class="list-group" id="chatList"></ul>
+        <select class="form-select mt-2" id="languageSelect">
+            <option value="en">English</option>
+            <option value="th">Thai</option>
+            <option value="ko">Korean</option>
+        </select>
+        <input type="text" class="form-control mt-2" id="messageInput" placeholder="Type your message">
+        <button class="btn btn-primary mt-2" onclick="sendMessage()">Send</button>
+        <button class="btn btn-secondary mt-2" onclick="startVoice()">Voice</button>
+    </div>
+
+    <!-- Firebase SDK (8.x 버전) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script>
+        // Firebase 설정 (사용자의 실제 값으로 교체)
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Firebase 초기화
+        try {
+            firebase.initializeApp(firebaseConfig);
+            console.log("Firebase initialized successfully");
+        } catch (error) {
+            console.error("Firebase initialization failed:", error);
+        }
+
+        // 데이터베이스 참조
+        const db = firebase.database();
+        const chatRef = db.ref("chat");
+
+        // 유저 ID 생성
+        const userId = "User_" + Math.random().toString(36).substr(2, 9);
+
+        // 실시간 채팅 리스너
+        chatRef.on("child_added", (snapshot) => {
+            const message = snapshot.val();
+            const chatList = document.getElementById("chatList");
+            chatList.innerHTML += `
+                <li class="list-group-item">
+                    [${message.userId}]: ${message.text} <br>
+                    [English]: ${message.translations.en} | 
+                    [Thai]: ${message.translations.th} | 
+                    [Korean]: ${message.translations.ko}
+                </li>`;
+            chatList.scrollTop = chatList.scrollHeight; // 자동 스크롤
+        }, (error) => {
+            console.error("Firebase listener error:", error);
+        });
+
+        async function translateText(text, sourceLang) {
+            if (!text || !sourceLang) {
+                console.error("Invalid input:", { text, sourceLang });
+                return null;
+            }
+            const targets = ["en", "th", "ko"].filter(t => t !== sourceLang);
+            const translations = { [sourceLang]: text };
+
+            for (const target of targets) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${target}`, {
+                    method: "GET"
+                });
+                if (!response.ok) {
+                    console.error(`Fetch error: ${response.status} - ${response.statusText}`);
+                    throw new Error(`Translation failed for ${target}`);
+                }
+                const data = await response.json();
+                translations[target] = data.responseData.translatedText;
+            }
+            return translations;
+        }
+
+        function sendMessage() {
+            const text = document.getElementById("messageInput").value;
+            const sourceLang = document.getElementById("languageSelect").value;
+            translateText(text, sourceLang).then(translations => {
+                if (!translations) return;
+                chatRef.push({
+                    userId: userId,
+                    text: text,
+                    translations: translations,
+                    timestamp: Date.now()
+                }).then(() => {
+                    console.log("Message sent successfully");
+                    document.getElementById("messageInput").value = "";
+                }).catch(error => console.error("Send error:", error));
+            }).catch(error => console.error("Translation error:", error));
+        }
+
+        function startVoice() {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = document.getElementById("languageSelect").value === "th" ? "th-TH" : 
+                              document.getElementById("languageSelect").value === "ko" ? "ko-KR" : "en-US";
+            recognition.onresult = event => {
+                document.getElementById("messageInput").value = event.results[0][0].transcript;
+                sendMessage();
+            };
+            recognition.onerror = event => console.error("Speech error:", event.error);
+            recognition.start();
+        }
+    </script>
+</body>
+</html>
