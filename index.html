@@ -22,39 +22,16 @@
         <button class="btn btn-secondary mt-2" onclick="startVoice()">Voice</button>
     </div>
 
-    <!-- Firebase SDK (8.x 버전) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script>
-        // Firebase 설정 (사용자의 실제 값으로 교체)
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-
-        // Firebase 초기화
-        try {
-            firebase.initializeApp(firebaseConfig);
-            console.log("Firebase initialized successfully");
-        } catch (error) {
-            console.error("Firebase initialization failed:", error);
-        }
-
-        // 데이터베이스 참조
-        const db = firebase.database();
-        const chatRef = db.ref("chat");
-
-        // 유저 ID 생성
+        const ws = new WebSocket('ws://localhost:8080');
         const userId = "User_" + Math.random().toString(36).substr(2, 9);
 
-        // 실시간 채팅 리스너
-        chatRef.on("child_added", (snapshot) => {
-            const message = snapshot.val();
+        ws.onopen = function() {
+            console.log("Connected to WebSocket server");
+        };
+
+        ws.onmessage = function(event) {
+            const message = JSON.parse(event.data);
             const chatList = document.getElementById("chatList");
             chatList.innerHTML += `
                 <li class="list-group-item">
@@ -64,9 +41,11 @@
                     [Korean]: ${message.translations.ko}
                 </li>`;
             chatList.scrollTop = chatList.scrollHeight; // 자동 스크롤
-        }, (error) => {
-            console.error("Firebase listener error:", error);
-        });
+        };
+
+        ws.onerror = function(error) {
+            console.error("WebSocket error:", error);
+        };
 
         async function translateText(text, sourceLang) {
             if (!text || !sourceLang) {
@@ -96,15 +75,14 @@
             const sourceLang = document.getElementById("languageSelect").value;
             translateText(text, sourceLang).then(translations => {
                 if (!translations) return;
-                chatRef.push({
+                const message = {
                     userId: userId,
                     text: text,
                     translations: translations,
                     timestamp: Date.now()
-                }).then(() => {
-                    console.log("Message sent successfully");
-                    document.getElementById("messageInput").value = "";
-                }).catch(error => console.error("Send error:", error));
+                };
+                ws.send(JSON.stringify(message));
+                document.getElementById("messageInput").value = "";
             }).catch(error => console.error("Translation error:", error));
         }
 
