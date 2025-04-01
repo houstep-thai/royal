@@ -11,6 +11,7 @@
 <body>
     <div class="container mt-3">
         <h3>Multi-Language Chat</h3>
+        <p>접속자 수: <span id="userCount">0</span></p>
         <ul class="list-group" id="chatList"></ul>
         <select class="form-select mt-2" id="languageSelect">
             <option value="en">English</option>
@@ -23,25 +24,39 @@
     </div>
 
     <script>
-        const ws = new WebSocket('ws://localhost:8080');
+        let connectedUsers = 0;
+        const chatList = document.getElementById("chatList");
+        const userCount = document.getElementById("userCount");
+        const messageInput = document.getElementById("messageInput");
+        const languageSelect = document.getElementById("languageSelect");
+
+        // 브라우저 내 WebSocket 서버 생성
+        const ws = new WebSocket('ws://localhost:8080'); // 로컬 WebSocket 서버 주소
         const userId = "User_" + Math.random().toString(36).substr(2, 9);
 
         ws.onopen = function() {
             console.log("Connected to WebSocket server");
+            connectedUsers++;
+            userCount.textContent = connectedUsers;
         };
 
         ws.onmessage = function(event) {
             const message = JSON.parse(event.data);
-            const chatList = document.getElementById("chatList");
             chatList.innerHTML += `
                 <li class="list-group-item">
                     [${message.userId}]: ${message.text} <br>
-                    [English]: ${message.translations.en} | 
-                    [Thai]: ${message.translations.th} | 
+                    [English]: ${message.translations.en} |
+                    [Thai]: ${message.translations.th} |
                     [Korean]: ${message.translations.ko}
                 </li>`;
             chatList.scrollTop = chatList.scrollHeight; // 자동 스크롤
         };
+
+        ws.onclose = function() {
+            console.log("Disconnected from WebSocket server");
+            connectedUsers--;
+            userCount.textContent = connectedUsers;
+        }
 
         ws.onerror = function(error) {
             console.error("WebSocket error:", error);
@@ -71,8 +86,8 @@
         }
 
         function sendMessage() {
-            const text = document.getElementById("messageInput").value;
-            const sourceLang = document.getElementById("languageSelect").value;
+            const text = messageInput.value;
+            const sourceLang = languageSelect.value;
             translateText(text, sourceLang).then(translations => {
                 if (!translations) return;
                 const message = {
@@ -82,16 +97,16 @@
                     timestamp: Date.now()
                 };
                 ws.send(JSON.stringify(message));
-                document.getElementById("messageInput").value = "";
+                messageInput.value = "";
             }).catch(error => console.error("Translation error:", error));
         }
 
         function startVoice() {
             const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            recognition.lang = document.getElementById("languageSelect").value === "th" ? "th-TH" : 
-                              document.getElementById("languageSelect").value === "ko" ? "ko-KR" : "en-US";
+            recognition.lang = languageSelect.value === "th" ? "th-TH" :
+                                languageSelect.value === "ko" ? "ko-KR" : "en-US";
             recognition.onresult = event => {
-                document.getElementById("messageInput").value = event.results[0][0].transcript;
+                messageInput.value = event.results[0][0].transcript;
                 sendMessage();
             };
             recognition.onerror = event => console.error("Speech error:", event.error);
