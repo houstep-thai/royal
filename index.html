@@ -11,7 +11,6 @@
 <body>
     <div class="container mt-3">
         <h3>Multi-Language Chat</h3>
-        <p>접속자 수: <span id="userCount">0</span></p>
         <ul class="list-group" id="chatList"></ul>
         <select class="form-select mt-2" id="languageSelect">
             <option value="en">English</option>
@@ -23,44 +22,51 @@
         <button class="btn btn-secondary mt-2" onclick="startVoice()">Voice</button>
     </div>
 
+    <!-- Firebase SDK (8.x 버전) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script>
-        let connectedUsers = 0;
-        const chatList = document.getElementById("chatList");
-        const userCount = document.getElementById("userCount");
-        const messageInput = document.getElementById("messageInput");
-        const languageSelect = document.getElementById("languageSelect");
-
-        // 브라우저 내 WebSocket 서버 생성
-        const ws = new WebSocket('ws://localhost:8080'); // 로컬 WebSocket 서버 주소
-        const userId = "User_" + Math.random().toString(36).substr(2, 9);
-
-        ws.onopen = function() {
-            console.log("Connected to WebSocket server");
-            connectedUsers++;
-            userCount.textContent = connectedUsers;
+        // Firebase 설정 (사용자의 실제 값으로 교체)
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
         };
 
-        ws.onmessage = function(event) {
-            const message = JSON.parse(event.data);
+        // Firebase 초기화
+        try {
+            firebase.initializeApp(firebaseConfig);
+            console.log("Firebase initialized successfully");
+        } catch (error) {
+            console.error("Firebase initialization failed:", error);
+        }
+
+        // 데이터베이스 참조
+        const db = firebase.database();
+        const chatRef = db.ref("chat");
+
+        // 유저 ID 생성
+        const userId = "User_" + Math.random().toString(36).substr(2, 9);
+
+        // 실시간 채팅 리스너
+        chatRef.on("child_added", (snapshot) => {
+            const message = snapshot.val();
+            const chatList = document.getElementById("chatList");
             chatList.innerHTML += `
                 <li class="list-group-item">
                     [${message.userId}]: ${message.text} <br>
-                    [English]: ${message.translations.en} |
-                    [Thai]: ${message.translations.th} |
+                    [English]: ${message.translations.en} | 
+                    [Thai]: ${message.translations.th} | 
                     [Korean]: ${message.translations.ko}
                 </li>`;
             chatList.scrollTop = chatList.scrollHeight; // 자동 스크롤
-        };
-
-        ws.onclose = function() {
-            console.log("Disconnected from WebSocket server");
-            connectedUsers--;
-            userCount.textContent = connectedUsers;
-        }
-
-        ws.onerror = function(error) {
-            console.error("WebSocket error:", error);
-        };
+        }, (error) => {
+            console.error("Firebase listener error:", error);
+        });
 
         async function translateText(text, sourceLang) {
             if (!text || !sourceLang) {
@@ -86,32 +92,33 @@
         }
 
         function sendMessage() {
-            const text = messageInput.value;
-            const sourceLang = languageSelect.value;
+            const text = document.getElementById("messageInput").value;
+            const sourceLang = document.getElementById("languageSelect").value;
             translateText(text, sourceLang).then(translations => {
                 if (!translations) return;
-                const message = {
+                chatRef.push({
                     userId: userId,
                     text: text,
                     translations: translations,
                     timestamp: Date.now()
-                };
-                ws.send(JSON.stringify(message));
-                messageInput.value = "";
+                }).then(() => {
+                    console.log("Message sent successfully");
+                    document.getElementById("messageInput").value = "";
+                }).catch(error => console.error("Send error:", error));
             }).catch(error => console.error("Translation error:", error));
         }
 
         function startVoice() {
             const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            recognition.lang = languageSelect.value === "th" ? "th-TH" :
-                                languageSelect.value === "ko" ? "ko-KR" : "en-US";
+            recognition.lang = document.getElementById("languageSelect").value === "th" ? "th-TH" : 
+                              document.getElementById("languageSelect").value === "ko" ? "ko-KR" : "en-US";
             recognition.onresult = event => {
-                messageInput.value = event.results[0][0].transcript;
+                document.getElementById("messageInput").value = event.results[0][0].transcript;
                 sendMessage();
             };
             recognition.onerror = event => console.error("Speech error:", event.error);
             recognition.start();
         }
     </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'929724c39c5da1c3',t:'MTc0MzUwMDYyMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
